@@ -2,12 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:musify/utils/helper.dart';
 import 'package:musify/utils/lang_mapping.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../widgets/common_dialog_widget.dart';
 import '../../widgets/cust_switch.dart';
+import '../../widgets/export_file_dialog.dart';
+import '../../widgets/backup_dialog.dart';
+import '../../widgets/restore_dialog.dart';
 import '../Library/library_controller.dart';
 import '../../widgets/snackbar.dart';
 import '/ui/widgets/link_piped.dart';
 import '/services/music_service.dart';
+import '/ui/player/player_controller.dart';
 import '/ui/utils/theme_controller.dart';
 import 'components/custom_expansion_tile.dart';
 import 'settings_screen_controller.dart';
@@ -51,12 +57,20 @@ class SettingsScreen extends StatelessWidget {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          tileColor: Theme.of(context).colorScheme.secondary,
+                          tileColor:
+                              Theme.of(context).colorScheme.secondary,
                           leading: const CircleAvatar(
                             child: Icon(Icons.download),
                           ),
                           title: Text("newVersionAvailable".tr),
-                          subtitle: Text("goToDownloadPage".tr),
+                          subtitle: Text(
+                            "goToDownloadPage".tr,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium!
+                                .copyWith(
+                                    color: Colors.white70, fontSize: 13),
+                          ),
                           onTap: () {},
                         )
                       : const SizedBox.shrink(),
@@ -82,6 +96,7 @@ class SettingsScreen extends StatelessWidget {
                                       : "light".tr,
                         ),
                       ),
+                      onTap: () {},
                     ),
 
                     ListTile(
@@ -89,12 +104,13 @@ class SettingsScreen extends StatelessWidget {
                       subtitle: Text("languageDes".tr),
                       trailing: Obx(
                         () => DropdownButton(
-                          value: settingsController.currentAppLanguageCode.value,
+                          value: settingsController
+                              .currentAppLanguageCode.value,
                           items: langMap.entries
                               .map(
-                                (e) => DropdownMenuItem(
-                                  value: e.key,
-                                  child: Text(e.value),
+                                (lang) => DropdownMenuItem(
+                                  value: lang.key,
+                                  child: Text(lang.value),
                                 ),
                               )
                               .toList(),
@@ -106,12 +122,90 @@ class SettingsScreen extends StatelessWidget {
                     if (!isDesktop)
                       ListTile(
                         title: Text("enableBottomNav".tr),
+                        subtitle: Text("enableBottomNavDes".tr),
                         trailing: Obx(
                           () => CustSwitch(
                             value: settingsController
                                 .isBottomNavBarEnabled.isTrue,
                             onChanged:
                                 settingsController.enableBottomNavBar,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+
+                CustomExpansionTile(
+                  title: "content".tr,
+                  icon: Icons.music_video,
+                  children: [
+                    ListTile(
+                      title: Text("setDiscoverContent".tr),
+                      subtitle: Obx(
+                        () => Text(
+                          settingsController.discoverContentType.value,
+                        ),
+                      ),
+                      onTap: () {},
+                    ),
+
+                    ListTile(
+                      title: Text("homeContentCount".tr),
+                      trailing: Obx(
+                        () => DropdownButton(
+                          value: settingsController
+                              .noOfHomeScreenContent.value,
+                          items: [3, 5, 7, 9, 11]
+                              .map(
+                                (e) => DropdownMenuItem(
+                                  value: e,
+                                  child: Text("$e"),
+                                ),
+                              )
+                              .toList(),
+                          onChanged:
+                              settingsController.setContentNumber,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                CustomExpansionTile(
+                  title: "music&Playback".tr,
+                  icon: Icons.music_note,
+                  children: [
+                    ListTile(
+                      title: Text("streamingQuality".tr),
+                      trailing: Obx(
+                        () => DropdownButton(
+                          value:
+                              settingsController.streamingQuality.value,
+                          items: [
+                            DropdownMenuItem(
+                              value: AudioQuality.Low,
+                              child: Text("low".tr),
+                            ),
+                            DropdownMenuItem(
+                              value: AudioQuality.High,
+                              child: Text("high".tr),
+                            ),
+                          ],
+                          onChanged:
+                              settingsController.setStreamingQuality,
+                        ),
+                      ),
+                    ),
+
+                    if (GetPlatform.isAndroid)
+                      ListTile(
+                        title: Text("loudnessNormalization".tr),
+                        trailing: Obx(
+                          () => CustSwitch(
+                            value: settingsController
+                                .loudnessNormalizationEnabled.value,
+                            onChanged: settingsController
+                                .toggleLoudnessNormalization,
                           ),
                         ),
                       ),
