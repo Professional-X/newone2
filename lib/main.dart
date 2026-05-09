@@ -1,27 +1,13 @@
-import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:terminate_restart/terminate_restart.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-import '/ui/screens/Search/search_screen_controller.dart';
-import '/utils/get_localization.dart';
-import '/services/downloader.dart';
-import '/services/piped_service.dart';
-import 'utils/app_link_controller.dart';
-import '/services/audio_handler.dart';
-import '/services/music_service.dart';
 import '/ui/home.dart';
-import '/ui/player/player_controller.dart';
-import 'ui/screens/Settings/settings_screen_controller.dart';
-import '/ui/utils/theme_controller.dart';
-import 'ui/screens/Home/home_screen_controller.dart';
-import 'ui/screens/Library/library_controller.dart';
-import 'utils/system_tray.dart';
-import 'utils/update_check_flag_file.dart';
+import '/utils/get_localization.dart';
+import '/utils/update_check_flag_file.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,26 +19,7 @@ Future<void> main() async {
 
   TerminateRestart.instance.initialize();
 
-  // SERVICES
-  startApplicationServices();
-
-  // AUDIO SERVICE (safe delayed init)
-  Future.delayed(const Duration(milliseconds: 500), () async {
-    if (!Get.isRegistered<AudioHandler>()) {
-      Get.put<AudioHandler>(
-        await initAudioService(),
-        permanent: true,
-      );
-    }
-  });
-
-  // ADS (safe init, no crash risk)
-  if (!GetPlatform.isDesktop) {
-    Future.delayed(const Duration(seconds: 2), () {
-      MobileAds.instance.initialize();
-    });
-  }
-
+  // ❌ TEMP SAFE MODE: all heavy services disabled
   runApp(const MyApp());
 }
 
@@ -61,13 +28,6 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // SAFE: only register once
-    if (!GetPlatform.isDesktop && !Get.isRegistered<AppLinksController>()) {
-      Future.delayed(const Duration(milliseconds: 300), () {
-        Get.put(AppLinksController());
-      });
-    }
-
     return GetMaterialApp(
       title: 'Musify',
       home: const Home(),
@@ -85,50 +45,17 @@ class MyApp extends StatelessWidget {
           maxScaleFactor: 1.1,
         );
 
-        return GetX<ThemeController>(
-          builder: (controller) {
-            return MediaQuery(
-              data: mQuery.copyWith(textScaler: scale),
-              child: AnimatedTheme(
-                duration: const Duration(milliseconds: 700),
-                data: controller.themedata.value ?? ThemeData.light(),
-                child: child ?? const SizedBox(),
-              ),
-            );
-          },
+        return MediaQuery(
+          data: mQuery.copyWith(textScaler: scale),
+          child: child ?? const SizedBox(),
         );
       },
     );
   }
 }
 
-Future<void> startApplicationServices() async {
-  Get.lazyPut(() => PipedServices(), fenix: true);
-  Get.lazyPut(() => MusicServices(), fenix: true);
-  Get.lazyPut(() => ThemeController(), fenix: true);
-  Get.lazyPut(() => PlayerController(), fenix: true);
-  Get.lazyPut(() => HomeScreenController(), fenix: true);
-  Get.lazyPut(() => LibrarySongsController(), fenix: true);
-  Get.lazyPut(() => LibraryPlaylistsController(), fenix: true);
-  Get.lazyPut(() => LibraryAlbumsController(), fenix: true);
-  Get.lazyPut(() => LibraryArtistsController(), fenix: true);
-  Get.lazyPut(() => SettingsScreenController(), fenix: true);
-  Get.lazyPut(() => Downloader(), fenix: true);
-
-  if (GetPlatform.isDesktop) {
-    Get.lazyPut(() => SearchScreenController(), fenix: true);
-    Get.put(DesktopSystemTray());
-  }
-}
-
 Future<void> initHive() async {
-  String path;
-
-  if (GetPlatform.isDesktop) {
-    path = "${(await getApplicationSupportDirectory()).path}/db";
-  } else {
-    path = (await getApplicationDocumentsDirectory()).path;
-  }
+  String path = (await getApplicationDocumentsDirectory()).path;
 
   await Hive.initFlutter(path);
 
@@ -152,18 +79,5 @@ void _setAppInitPrefs() {
       'newVersionVisibility': updateCheckFlag,
       "cacheHomeScreenData": true,
     });
-  }
-}
-
-class LifecycleHandler extends WidgetsBindingObserver {
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) async {
-    if (state == AppLifecycleState.resumed) {
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    } else if (state == AppLifecycleState.detached) {
-      if (Get.isRegistered<AudioHandler>()) {
-        await Get.find<AudioHandler>().customAction("saveSession");
-      }
-    }
   }
 }
