@@ -25,61 +25,85 @@ import 'utils/update_check_flag_file.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   await initHive();
   _setAppInitPrefs();
-  startApplicationServices();
-  Get.put<AudioHandler>(await initAudioService(), permanent: true);
-  WidgetsBinding.instance.addObserver(LifecycleHandler());
+
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+
   TerminateRestart.instance.initialize();
-  if (!GetPlatform.isDesktop) await MobileAds.instance.initialize();
+
+  // SERVICES (safe startup)
+  startApplicationServices();
+
+  // AUDIO SERVICE (delayed safe init)
+  Future.delayed(const Duration(milliseconds: 500), () async {
+    Get.put<AudioHandler>(await initAudioService(), permanent: true);
+  });
+
+  // ADS (safe delayed init)
+  if (!GetPlatform.isDesktop) {
+    Future.delayed(const Duration(seconds: 2), () {
+      MobileAds.instance.initialize();
+    });
+  }
+
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    if (!GetPlatform.isDesktop) Get.put(AppLinksController());
+    if (!GetPlatform.isDesktop) {
+      Get.put(AppLinksController());
+    }
+
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+
     return GetMaterialApp(
-        title: 'Musify',
-        home: const Home(),
-        debugShowCheckedModeBanner: false,
-        translations: Languages(),
-        locale:
-            Locale(Hive.box("AppPrefs").get('currentAppLanguageCode') ?? "en"),
-        fallbackLocale: const Locale("en"),
-        builder: (context, child) {
-          final mQuery = MediaQuery.of(context);
-          final scale =
-              mQuery.textScaler.clamp(minScaleFactor: 1.0, maxScaleFactor: 1.1);
-          return Stack(
-            children: [
-              GetX<ThemeController>(
-                builder: (controller) => MediaQuery(
-                  data: mQuery.copyWith(textScaler: scale),
-                  child: AnimatedTheme(
-                      duration: const Duration(milliseconds: 700),
-                      data: controller.themedata.value!,
-                      child: child!),
+      title: 'Musify',
+      home: const Home(),
+      debugShowCheckedModeBanner: false,
+      translations: Languages(),
+      locale: Locale(
+        Hive.box("AppPrefs").get('currentAppLanguageCode') ?? "en",
+      ),
+      fallbackLocale: const Locale("en"),
+      builder: (context, child) {
+        final mQuery = MediaQuery.of(context);
+        final scale = mQuery.textScaler.clamp(
+          minScaleFactor: 1.0,
+          maxScaleFactor: 1.1,
+        );
+
+        return Stack(
+          children: [
+            GetX<ThemeController>(
+              builder: (controller) => MediaQuery(
+                data: mQuery.copyWith(textScaler: scale),
+                child: AnimatedTheme(
+                  duration: const Duration(milliseconds: 700),
+                  data: controller.themedata.value!,
+                  child: child!,
                 ),
               ),
-              GestureDetector(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    color: Colors.transparent,
-                    height: mQuery.padding.bottom,
-                    width: mQuery.size.width,
-                  ),
+            ),
+            GestureDetector(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Container(
+                  color: Colors.transparent,
+                  height: mQuery.padding.bottom,
+                  width: mQuery.size.width,
                 ),
-              )
-            ],
-          );
-        });
+              ),
+            )
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -95,30 +119,34 @@ Future<void> startApplicationServices() async {
   Get.lazyPut(() => LibraryArtistsController(), fenix: true);
   Get.lazyPut(() => SettingsScreenController(), fenix: true);
   Get.lazyPut(() => Downloader(), fenix: true);
+
   if (GetPlatform.isDesktop) {
     Get.lazyPut(() => SearchScreenController(), fenix: true);
     Get.put(DesktopSystemTray());
   }
 }
 
-initHive() async {
-  String applicationDataDirectoryPath;
+Future<void> initHive() async {
+  String path;
+
   if (GetPlatform.isDesktop) {
-    applicationDataDirectoryPath =
+    path =
         "${(await getApplicationSupportDirectory()).path}/db";
   } else {
-    applicationDataDirectoryPath =
-        (await getApplicationDocumentsDirectory()).path;
+    path = (await getApplicationDocumentsDirectory()).path;
   }
-  await Hive.initFlutter(applicationDataDirectoryPath);
+
+  await Hive.initFlutter(path);
+
   await Hive.openBox("SongsCache");
   await Hive.openBox("SongDownloads");
-  await Hive.openBox('SongsUrlCache');
+  await Hive.openBox("SongsUrlCache");
   await Hive.openBox("AppPrefs");
 }
 
 void _setAppInitPrefs() {
   final appPrefs = Hive.box("AppPrefs");
+
   if (appPrefs.isEmpty) {
     appPrefs.putAll({
       'themeModeType': 0,
