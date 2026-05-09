@@ -33,15 +33,20 @@ Future<void> main() async {
 
   TerminateRestart.instance.initialize();
 
-  // SERVICES (safe startup)
+  // SERVICES
   startApplicationServices();
 
-  // AUDIO SERVICE (delayed safe init)
+  // AUDIO SERVICE (safe delayed init)
   Future.delayed(const Duration(milliseconds: 500), () async {
-    Get.put<AudioHandler>(await initAudioService(), permanent: true);
+    if (!Get.isRegistered<AudioHandler>()) {
+      Get.put<AudioHandler>(
+        await initAudioService(),
+        permanent: true,
+      );
+    }
   });
 
-  // ADS (safe delayed init)
+  // ADS (safe init, no crash risk)
   if (!GetPlatform.isDesktop) {
     Future.delayed(const Duration(seconds: 2), () {
       MobileAds.instance.initialize();
@@ -56,11 +61,12 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!GetPlatform.isDesktop) {
-      Get.put(AppLinksController());
+    // SAFE: only register once
+    if (!GetPlatform.isDesktop && !Get.isRegistered<AppLinksController>()) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        Get.put(AppLinksController());
+      });
     }
-
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
     return GetMaterialApp(
       title: 'Musify',
@@ -73,34 +79,23 @@ class MyApp extends StatelessWidget {
       fallbackLocale: const Locale("en"),
       builder: (context, child) {
         final mQuery = MediaQuery.of(context);
+
         final scale = mQuery.textScaler.clamp(
           minScaleFactor: 1.0,
           maxScaleFactor: 1.1,
         );
 
-        return Stack(
-          children: [
-            GetX<ThemeController>(
-              builder: (controller) => MediaQuery(
-                data: mQuery.copyWith(textScaler: scale),
-                child: AnimatedTheme(
-                  duration: const Duration(milliseconds: 700),
-                  data: controller.themedata.value!,
-                  child: child!,
-                ),
+        return GetX<ThemeController>(
+          builder: (controller) {
+            return MediaQuery(
+              data: mQuery.copyWith(textScaler: scale),
+              child: AnimatedTheme(
+                duration: const Duration(milliseconds: 700),
+                data: controller.themedata.value ?? ThemeData.light(),
+                child: child ?? const SizedBox(),
               ),
-            ),
-            GestureDetector(
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: Container(
-                  color: Colors.transparent,
-                  height: mQuery.padding.bottom,
-                  width: mQuery.size.width,
-                ),
-              ),
-            )
-          ],
+            );
+          },
         );
       },
     );
@@ -130,8 +125,7 @@ Future<void> initHive() async {
   String path;
 
   if (GetPlatform.isDesktop) {
-    path =
-        "${(await getApplicationSupportDirectory()).path}/db";
+    path = "${(await getApplicationSupportDirectory()).path}/db";
   } else {
     path = (await getApplicationDocumentsDirectory()).path;
   }
@@ -156,7 +150,7 @@ void _setAppInitPrefs() {
       'themePrimaryColor': 4278199603,
       'discoverContentType': "QP",
       'newVersionVisibility': updateCheckFlag,
-      "cacheHomeScreenData": true
+      "cacheHomeScreenData": true,
     });
   }
 }
@@ -167,7 +161,9 @@ class LifecycleHandler extends WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     } else if (state == AppLifecycleState.detached) {
-      await Get.find<AudioHandler>().customAction("saveSession");
+      if (Get.isRegistered<AudioHandler>()) {
+        await Get.find<AudioHandler>().customAction("saveSession");
+      }
     }
   }
 }
